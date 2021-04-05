@@ -5,6 +5,8 @@
 
 #include <vector>
 
+#include "Components/TextRenderComponent.h"
+
 ADungeon::ADungeon()
 {
 	TileSize = 200.0f;
@@ -15,7 +17,7 @@ void ADungeon::AddMesh(UStaticMesh* Mesh, int X, int Y, float Rotation)
 {
 	UStaticMeshComponent* MeshComponent = NewObject<UStaticMeshComponent>(this, UStaticMeshComponent::StaticClass(), MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), "CornerConcave"));
 	MeshComponent->SetStaticMesh(Mesh);
-	MeshComponent->SetRelativeLocation(FVector(X*TileSize, Y*TileSize, 0.0f));
+	MeshComponent->SetRelativeLocation(FVector(X, Y, 0.0f));
 	MeshComponent->SetRelativeRotation(FRotator(0.0f, Rotation, 0.0f));
 	MeshComponent->SetupAttachment(RootComponent);
 }
@@ -34,72 +36,296 @@ void ADungeon::Test1()
 		{'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' , 'x' },
 	};
 
-	for(int Y = 1; Y < Floorplan.size(); ++Y)
-	{
-		const auto& Above = Floorplan.at(Y-1); 
-		const auto& Current = Floorplan.at(Y); 
-		for(int X = 1; X < Current.size(); ++X)
-		{
-			char TileType = Current.at(X);
-			char TileTypeLeft = Current.at(X-1);
-			char TileTypeAbove = Above.at(X);
-			char TileTypeAboveLeft = Above.at(X-1);
+}
 
-			if (TileTypeAboveLeft == 'x' && TileTypeAbove == 'x' && TileTypeLeft == 'x' && TileType == ' ')
+enum Direction
+{
+	North,
+    East,
+    South,
+    West,
+	NumDirections
+};
+
+struct FCell
+{
+	bool Walls[4] = {true, true, true, true};
+	bool Visited = false;
+};
+
+class FMazeGenerator
+{
+public:
+	FMazeGenerator(int W, int H, int32 Seed) : Width(W), Height(H), RNG(Seed)
+	{
+		Cells = new FCell[Width*Height];
+	}
+
+	~FMazeGenerator()
+	{
+		delete [] Cells;
+	}
+
+	FCell* GetCell(int X, int Y)
+	{
+		if (X < 0 || X >= Width)
+		{
+			return nullptr;
+		}
+		if (Y < 0 || Y >= Height)
+		{
+			return nullptr;
+		}
+		return &Cells[X + Y*Width];
+	}
+
+	FCell* GetNeighbor(int X, int Y, Direction Dir)
+	{
+		switch(Dir)
+		{
+			case North:
+				return GetCell(X, Y-1);
+			case East:
+				return GetCell(X+1, Y);
+			case South:
+				return GetCell(X, Y+1);
+			case West:
+				return GetCell(X-1, Y);
+			default:
+				return nullptr;
+		}
+	}
+	
+	void GenerateRecursive(int X, int Y)
+	{
+		FCell* Cell = GetCell(X, Y);
+		Cell->Visited = true;
+		UE_LOG(LogTemp, Display, TEXT("Visiting %d, %d"), X, Y);
+
+		while (true)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Counting neighbors for %d, %d"), X, Y);
+			int Neighbors[4];
+			int NumNeighbors = 0;
+			for (int Dir = 0; Dir < NumDirections; Dir++)
 			{
-				AddMesh(CornerConcaveMesh, X, Y, 180.0f);
+				FCell* Neighbor = GetNeighbor(X, Y, static_cast<Direction>(Dir));
+				if (Neighbor && !Neighbor->Visited)
+				{
+					Neighbors[NumNeighbors] = Dir;
+					NumNeighbors++;
+				}
 			}
-			if (TileTypeAboveLeft == 'x' && TileTypeAbove == 'x' && TileTypeLeft == ' ' && TileType == 'x')
+			UE_LOG(LogTemp, Display, TEXT("Num neighbors: %d"), NumNeighbors);
+
+			if (NumNeighbors == 0)
 			{
-				AddMesh(CornerConcaveMesh, X, Y, 270.0f);
+				break;
 			}
-			if (TileTypeAboveLeft == 'x' && TileTypeAbove == ' ' && TileTypeLeft == 'x' && TileType == 'x')
+			int NeighborIndex = 0;
+			if (NumNeighbors > 1)
 			{
-				AddMesh(CornerConcaveMesh, X, Y, 90.0f);
+				NeighborIndex = RNG.RandRange(0, NumNeighbors - 1);
 			}
-			if (TileTypeAboveLeft == ' ' && TileTypeAbove == 'x' && TileTypeLeft == 'x' && TileType == 'x')
+			Direction Dir = static_cast<Direction>(Neighbors[NeighborIndex]);
+			FCell* Neighbor = GetNeighbor(X, Y, Dir);
+			switch(Dir)
 			{
-				AddMesh(CornerConcaveMesh, X, Y, 0.0f);
+			case North:
+				Cell->Walls[North] = false;
+				Neighbor->Walls[South] = false;
+				GenerateRecursive(X, Y-1);
+				break;
+			case East:
+				Cell->Walls[East] = false;
+				Neighbor->Walls[West] = false;
+				GenerateRecursive(X+1, Y);
+				break;
+			case South:
+				Cell->Walls[South] = false;
+				Neighbor->Walls[North] = false;
+				GenerateRecursive(X, Y+1);
+				break;
+			case West:
+				Cell->Walls[West] = false;
+				Neighbor->Walls[East] = false;
+				GenerateRecursive(X-1, Y);
+				break;
+			default:
+				break;
 			}
-			if (TileTypeAboveLeft == ' ' && TileTypeAbove == ' ' && TileTypeLeft == ' ' && TileType == 'x')
+		}
+		UE_LOG(LogTemp, Display, TEXT("Done with %d, %d"), X, Y);
+	}
+
+protected:
+	FCell* Cells;
+	int Width;
+	int Height;
+	FRandomStream RNG;
+};
+
+void ADungeon::GenerateMaze(int Width, int Height)
+{
+	FMazeGenerator M(Width, Height, 123);
+	M.GenerateRecursive(1, 1);
+
+	std::vector<std::vector<char>> Floorplan;
+	for (int Y = 0; Y < Height; Y++)
+	{
+		const float YPos = Y*3*TileSize;
+		for (int X = 0; X < Width; X++)
+		{
+			FCell* Cell = M.GetCell(X, Y);
+			FCell* NorthNeighbor = M.GetNeighbor(X, Y, North);
+			FCell* EastNeighbor = M.GetNeighbor(X, Y, East);
+			FCell* SouthNeighbor = M.GetNeighbor(X, Y, South);
+			FCell* WestNeighbor = M.GetNeighbor(X, Y, West);
+
+			const float XPos = X*3*TileSize;
+
+			FText Text = FText::FromString(FString::Printf(TEXT("(%d,%d)"), X, Y));
+			UTextRenderComponent* TextComponent = NewObject<UTextRenderComponent>(this, UTextRenderComponent::StaticClass(), MakeUniqueObjectName(this, UTextRenderComponent::StaticClass(), "Text"));
+			TextComponent->SetText(Text);
+			TextComponent->SetRelativeLocation(FVector(XPos, YPos, 10.0f));
+			TextComponent->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
+			TextComponent->SetupAttachment(RootComponent);
+
+			AddMesh(FloorMesh, XPos, YPos, 0.0f);
+			if (Cell->Walls[North])
 			{
-				AddMesh(CornerConvexMesh, X, Y, 270.0f);
+				AddMesh(WallMesh, XPos, YPos - TileSize, 180.0f);
+				if (Cell->Walls[West])
+				{
+					AddMesh(CornerConcaveMesh, XPos - TileSize, YPos - TileSize, 180.0f);
+				} else
+				{
+					AddMesh(WallMesh, XPos - TileSize, YPos - TileSize, 180.0f);
+				}
+				if (Cell->Walls[East])
+				{
+					AddMesh(CornerConcaveMesh, XPos + TileSize, YPos - TileSize, 270.0f);
+				} else
+				{
+					AddMesh(WallMesh, XPos + TileSize, YPos - TileSize, 180.0f);
+				}
+			} else
+			{
+				AddMesh(FloorMesh, XPos, YPos - TileSize, 0.0f);
+				if (Cell->Walls[East])
+				{
+					if (EastNeighbor && EastNeighbor->Walls[North] || NorthNeighbor && NorthNeighbor->Walls[East])
+					{
+						AddMesh(WallMesh, XPos + TileSize, YPos - TileSize, 270.0f);
+					} else
+					{
+						AddMesh(CornerConvexMesh, XPos + TileSize, YPos - TileSize, 270.0f);
+					}
+				} else
+				{
+					if (EastNeighbor && EastNeighbor->Walls[North])
+					{
+						AddMesh(CornerConvexMesh, XPos + TileSize, YPos - TileSize, 180.0f);
+					} else
+					{
+						AddMesh(FloorMesh, XPos + TileSize, YPos - TileSize, 0.0f);
+					}
+				}
+				if (Cell->Walls[West])
+				{
+					if (NorthNeighbor && NorthNeighbor->Walls[West] || WestNeighbor && WestNeighbor->Walls[North])
+					{
+						AddMesh(WallMesh, XPos - TileSize, YPos - TileSize, 90.0f);
+					} else
+					{
+						AddMesh(CornerConvexMesh, XPos - TileSize, YPos - TileSize, 0.0f);
+					}
+				} else
+				{
+					if (WestNeighbor && WestNeighbor->Walls[North])
+					{
+						AddMesh(CornerConvexMesh, XPos - TileSize, YPos - TileSize, 90.0f);
+					} else
+					{
+						AddMesh(FloorMesh, XPos - TileSize, YPos - TileSize, 0.0f);
+					}
+				}
 			}
-			if (TileTypeAboveLeft == ' ' && TileTypeAbove == ' ' && TileTypeLeft == 'x' && TileType == ' ')
+
+			if (Cell->Walls[South])
 			{
-				AddMesh(CornerConvexMesh, X, Y, 0.0f);
+				AddMesh(WallMesh, XPos, YPos + TileSize, 0.0f);
+				if (Cell->Walls[West])
+				{
+					AddMesh(CornerConcaveMesh, XPos - TileSize, YPos + TileSize, 90.0f);
+				} else
+				{
+					AddMesh(WallMesh, XPos - TileSize, YPos + TileSize, 0.0f);
+				}
+				if (Cell->Walls[East])
+				{
+					AddMesh(CornerConcaveMesh, XPos + TileSize, YPos + TileSize, 0.0f);
+				} else
+				{
+					AddMesh(WallMesh, XPos + TileSize, YPos + TileSize, 0.0f);
+				}
+			} else
+			{
+				AddMesh(FloorMesh, XPos, YPos + TileSize, 0.0f);
+				if (Cell->Walls[East])
+				{
+					if (SouthNeighbor && SouthNeighbor->Walls[East] || EastNeighbor && EastNeighbor->Walls[South])
+					{
+						AddMesh(WallMesh, XPos + TileSize, YPos + TileSize, 270.0f);
+					} else
+					{
+						AddMesh(CornerConvexMesh, XPos + TileSize, YPos + TileSize, 180.0f);
+					}
+				}
+				else
+				{
+					if (EastNeighbor && EastNeighbor->Walls[South])
+					{
+						AddMesh(CornerConvexMesh, XPos + TileSize, YPos + TileSize, 270.0f);
+					} else
+					{
+						AddMesh(FloorMesh, XPos + TileSize, YPos + TileSize, 0.0f);
+					}
+				}
+				if (Cell->Walls[West])
+				{
+					if (SouthNeighbor && SouthNeighbor->Walls[West] || WestNeighbor && WestNeighbor->Walls[South])
+					{
+						AddMesh(WallMesh, XPos - TileSize, YPos + TileSize, 90.0f);
+					} else
+					{
+						AddMesh(CornerConvexMesh, XPos - TileSize, YPos + TileSize, 90.0f);
+					}
+				} else
+				{
+					if (WestNeighbor && WestNeighbor->Walls[South])
+					{
+						AddMesh(CornerConvexMesh, XPos - TileSize, YPos + TileSize, 0.0f);
+					} else
+					{
+						AddMesh(FloorMesh, XPos - TileSize, YPos + TileSize, 0.0f);
+					}
+				}
 			}
-			if (TileTypeAboveLeft == ' ' && TileTypeAbove == 'x' && TileTypeLeft == ' ' && TileType == ' ')
+
+			if (Cell->Walls[West])
 			{
-				AddMesh(CornerConvexMesh, X, Y, 180.0f);
+				AddMesh(WallMesh, XPos - TileSize, YPos, 90.0f);
+			} else
+			{
+				AddMesh(FloorMesh, XPos - TileSize, YPos, 0.0f);
 			}
-			if (TileTypeAboveLeft == 'x' && TileTypeAbove == ' ' && TileTypeLeft == ' ' && TileType == ' ')
+			if (Cell->Walls[East])
 			{
-				AddMesh(CornerConvexMesh, X, Y, 90.0f);
-			}
-			if (TileTypeAboveLeft == 'x' && TileTypeAbove == 'x' && TileTypeLeft == ' ' && TileType == ' ')
+				AddMesh(WallMesh, XPos + TileSize, YPos, 270.0f);
+			} else
 			{
-				AddMesh(WallMesh, X, Y, 180.0f);
-			}
-			if (TileTypeAboveLeft == 'x' && TileTypeAbove == ' ' && TileTypeLeft == 'x' && TileType == ' ')
-			{
-				AddMesh(WallMesh, X, Y, 90.0f);
-			}
-			if (TileTypeAboveLeft == ' ' && TileTypeAbove == 'x' && TileTypeLeft == ' ' && TileType == 'x')
-			{
-				AddMesh(WallMesh, X, Y, 270.0f);
-			}
-			if (TileTypeAboveLeft == ' ' && TileTypeAbove == ' ' && TileTypeLeft == 'x' && TileType == 'x')
-			{
-				AddMesh(WallMesh, X, Y, 0.0f);
-			}
-			if (TileTypeAboveLeft == ' ' && TileTypeAbove == ' ' && TileTypeLeft == ' ' && TileType == ' ')
-			{
-				AddMesh(FloorMesh, X, Y, 0.0f);
-			}
-			if (TileTypeAboveLeft == 'x' && TileTypeAbove == 'x' && TileTypeLeft == 'x' && TileType == 'x')
-			{
-				AddMesh(CeilingMesh, X, Y, 0.0f);
+				AddMesh(FloorMesh, XPos + TileSize, YPos, 0.0f);
 			}
 		}
 	}

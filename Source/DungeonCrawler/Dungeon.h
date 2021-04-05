@@ -3,8 +3,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
+#include <array>
+
 #include "GameFramework/Actor.h"
 #include "Dungeon.generated.h"
+
 
 UCLASS()
 class DUNGEONCRAWLER_API ADungeon : public AActor
@@ -18,6 +22,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	void Test1();
+
+	UFUNCTION(BlueprintCallable)
+	void GenerateMaze(int Width, int Height);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	UStaticMesh* FloorMesh;
