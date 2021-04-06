@@ -5,172 +5,39 @@
 
 #include <vector>
 
+
+#include "Cell.h"
+#include "MazeGenerator.h"
 #include "Components/TextRenderComponent.h"
 
 ADungeon::ADungeon()
 {
 	TileSize = 200.0f;
 	RootComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Root"));
+	FloorMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Floor"));
+	CeilingMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Ceiling"));
+	WallMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Wall"));
+	CornerConvexMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("CornerConvex"));
+	CornerConcaveMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("CornerConcave"));
 }
 
-void ADungeon::AddMesh(UStaticMesh* Mesh, int X, int Y, float Rotation)
+void ADungeon::AddMesh(UInstancedStaticMeshComponent* Mesh, int X, int Y, float Rotation)
 {
-	UStaticMeshComponent* MeshComponent = NewObject<UStaticMeshComponent>(this, UStaticMeshComponent::StaticClass(), MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), "CornerConcave"));
-	MeshComponent->SetStaticMesh(Mesh);
-	MeshComponent->SetRelativeLocation(FVector(X, Y, 0.0f));
-	MeshComponent->SetRelativeRotation(FRotator(0.0f, Rotation, 0.0f));
-	MeshComponent->SetupAttachment(RootComponent);
+	FTransform Transform(FRotator(0.0f, Rotation, 0.0f), FVector(X, Y, 0.0f));
+	Mesh->AddInstance(Transform);
 }
-
-void ADungeon::Test1()
-{
-	std::vector<std::vector<char>> Floorplan = {
-		{'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' , 'x' },
-		{'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' , 'x' },
-		{'x', 'x', ' ', ' ', 'x', ' ', ' ', 'x' , 'x' },
-		{'x', 'x', ' ', ' ', ' ', ' ', ' ', 'x' , 'x' },
-		{'x', 'x', 'x', ' ', ' ', ' ', 'x', 'x' , 'x' },
-		{'x', 'x', ' ', ' ', ' ', ' ', ' ', 'x' , 'x' },
-		{'x', 'x', ' ', ' ', 'x', ' ', ' ', 'x' , 'x' },
-		{'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' , 'x' },
-		{'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' , 'x' },
-	};
-
-}
-
-enum Direction
-{
-	North,
-    East,
-    South,
-    West,
-	NumDirections
-};
-
-struct FCell
-{
-	bool Walls[4] = {true, true, true, true};
-	bool Visited = false;
-};
-
-class FMazeGenerator
-{
-public:
-	FMazeGenerator(int W, int H, int32 Seed) : Width(W), Height(H), RNG(Seed)
-	{
-		Cells = new FCell[Width*Height];
-	}
-
-	~FMazeGenerator()
-	{
-		delete [] Cells;
-	}
-
-	FCell* GetCell(int X, int Y)
-	{
-		if (X < 0 || X >= Width)
-		{
-			return nullptr;
-		}
-		if (Y < 0 || Y >= Height)
-		{
-			return nullptr;
-		}
-		return &Cells[X + Y*Width];
-	}
-
-	FCell* GetNeighbor(int X, int Y, Direction Dir)
-	{
-		switch(Dir)
-		{
-			case North:
-				return GetCell(X, Y-1);
-			case East:
-				return GetCell(X+1, Y);
-			case South:
-				return GetCell(X, Y+1);
-			case West:
-				return GetCell(X-1, Y);
-			default:
-				return nullptr;
-		}
-	}
-	
-	void GenerateRecursive(int X, int Y)
-	{
-		FCell* Cell = GetCell(X, Y);
-		Cell->Visited = true;
-		UE_LOG(LogTemp, Display, TEXT("Visiting %d, %d"), X, Y);
-
-		while (true)
-		{
-			UE_LOG(LogTemp, Display, TEXT("Counting neighbors for %d, %d"), X, Y);
-			int Neighbors[4];
-			int NumNeighbors = 0;
-			for (int Dir = 0; Dir < NumDirections; Dir++)
-			{
-				FCell* Neighbor = GetNeighbor(X, Y, static_cast<Direction>(Dir));
-				if (Neighbor && !Neighbor->Visited)
-				{
-					Neighbors[NumNeighbors] = Dir;
-					NumNeighbors++;
-				}
-			}
-			UE_LOG(LogTemp, Display, TEXT("Num neighbors: %d"), NumNeighbors);
-
-			if (NumNeighbors == 0)
-			{
-				break;
-			}
-			int NeighborIndex = 0;
-			if (NumNeighbors > 1)
-			{
-				NeighborIndex = RNG.RandRange(0, NumNeighbors - 1);
-			}
-			Direction Dir = static_cast<Direction>(Neighbors[NeighborIndex]);
-			FCell* Neighbor = GetNeighbor(X, Y, Dir);
-			switch(Dir)
-			{
-			case North:
-				Cell->Walls[North] = false;
-				Neighbor->Walls[South] = false;
-				GenerateRecursive(X, Y-1);
-				break;
-			case East:
-				Cell->Walls[East] = false;
-				Neighbor->Walls[West] = false;
-				GenerateRecursive(X+1, Y);
-				break;
-			case South:
-				Cell->Walls[South] = false;
-				Neighbor->Walls[North] = false;
-				GenerateRecursive(X, Y+1);
-				break;
-			case West:
-				Cell->Walls[West] = false;
-				Neighbor->Walls[East] = false;
-				GenerateRecursive(X-1, Y);
-				break;
-			default:
-				break;
-			}
-		}
-		UE_LOG(LogTemp, Display, TEXT("Done with %d, %d"), X, Y);
-	}
-
-protected:
-	FCell* Cells;
-	int Width;
-	int Height;
-	FRandomStream RNG;
-};
 
 void ADungeon::GenerateMaze(int Width, int Height)
 {
+	FloorMesh->ClearInstances();
+	CeilingMesh->ClearInstances();
+	WallMesh->ClearInstances();
+	CornerConvexMesh->ClearInstances();
+	CornerConcaveMesh->ClearInstances();
+	
 	FMazeGenerator M(Width, Height, 123);
 	M.GenerateRecursive(1, 1);
-
-	std::vector<std::vector<char>> Floorplan;
+	
 	for (int Y = 0; Y < Height; Y++)
 	{
 		const float YPos = Y*3*TileSize;

@@ -18,28 +18,25 @@ class DUNGEONCRAWLER_API ADungeon : public AActor
 public:	
 	ADungeon();
 
-	void AddMesh(UStaticMesh* Mesh, int X, int Y, float Rotation);
+	void AddMesh(UInstancedStaticMeshComponent* Mesh, int X, int Y, float Rotation);
 	
-	UFUNCTION(BlueprintCallable)
-	void Test1();
-
 	UFUNCTION(BlueprintCallable)
 	void GenerateMaze(int Width, int Height);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* FloorMesh;
+	UInstancedStaticMeshComponent* FloorMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* CeilingMesh;
+	UInstancedStaticMeshComponent* CeilingMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* WallMesh;
+	UInstancedStaticMeshComponent* WallMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* CornerConvexMesh;
+	UInstancedStaticMeshComponent* CornerConvexMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* CornerConcaveMesh;
+	UInstancedStaticMeshComponent* CornerConcaveMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float TileSize;
