@@ -19,7 +19,8 @@ public:
 	ADungeon();
 
 	void AddMesh(UInstancedStaticMeshComponent* Mesh, int X, int Y, float Rotation);
-	
+	void AddCellLabel(int X, int Y);
+
 	UFUNCTION(BlueprintCallable)
 	void GenerateMaze(int Width, int Height);
 

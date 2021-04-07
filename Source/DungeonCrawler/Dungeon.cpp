@@ -27,6 +27,18 @@ void ADungeon::AddMesh(UInstancedStaticMeshComponent* Mesh, int X, int Y, float 
 	Mesh->AddInstance(Transform);
 }
 
+void ADungeon::AddCellLabel(int X, int Y)
+{
+	const float XPos = X*3*TileSize;
+	const float YPos = Y*3*TileSize;
+	const FText Text = FText::FromString(FString::Printf(TEXT("(%d,%d)"), X, Y));
+	UTextRenderComponent* TextComponent = NewObject<UTextRenderComponent>(this, UTextRenderComponent::StaticClass(), MakeUniqueObjectName(this, UTextRenderComponent::StaticClass(), "Text"));
+	TextComponent->SetText(Text);
+	TextComponent->SetRelativeLocation(FVector(XPos, YPos, 10.0f));
+	TextComponent->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
+	TextComponent->SetupAttachment(RootComponent);
+}
+
 void ADungeon::GenerateMaze(int Width, int Height)
 {
 	FloorMesh->ClearInstances();
@@ -50,13 +62,6 @@ void ADungeon::GenerateMaze(int Width, int Height)
 			FCell* WestNeighbor = M.GetNeighbor(X, Y, West);
 
 			const float XPos = X*3*TileSize;
-
-			FText Text = FText::FromString(FString::Printf(TEXT("(%d,%d)"), X, Y));
-			UTextRenderComponent* TextComponent = NewObject<UTextRenderComponent>(this, UTextRenderComponent::StaticClass(), MakeUniqueObjectName(this, UTextRenderComponent::StaticClass(), "Text"));
-			TextComponent->SetText(Text);
-			TextComponent->SetRelativeLocation(FVector(XPos, YPos, 10.0f));
-			TextComponent->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
-			TextComponent->SetupAttachment(RootComponent);
 
 			AddMesh(FloorMesh, XPos, YPos, 0.0f);
 			if (Cell->Walls[North])
